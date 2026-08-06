@@ -269,7 +269,7 @@ server.tool(
     rock_id: z.string().describe("The rock ID"),
     title: z.string().describe("The milestone description, e.g. 'Define customer Day 1-30 activation milestones'"),
     due_date: z.string().optional().describe("Due date in ISO 8601 format, e.g. '2026-09-30T00:00:00'"),
-    status: z.enum(["Incomplete", "Complete"]).optional().describe("Milestone completion status (default: Incomplete)"),
+    status: z.enum(["NotDone", "Done"]).optional().describe("Milestone completion status (default: NotDone)"),
   },
   async ({ rock_id, title, due_date, status }) => {
     const body: Record<string, unknown> = { title };

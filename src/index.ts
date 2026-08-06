@@ -205,6 +205,84 @@ server.tool(
   }
 );
 
+// 11. Get a single rock by ID (includes status, completion, results)
+server.tool(
+  "get_rock",
+  "Get full details for a specific rock by ID, including status, completion percentage, and results so far.",
+  { rock_id: z.string().describe("The rock ID") },
+  async ({ rock_id }) => {
+    const data = await bloomFetch(`/rocks/${rock_id}`);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  }
+);
+
+// 12. Get rocks for a specific user (useful for managers viewing their team)
+server.tool(
+  "get_user_rocks",
+  "Get rocks for a specific user by their user ID. Use get_my_rocks first to find user IDs.",
+  { user_id: z.string().describe("The user ID") },
+  async ({ user_id }) => {
+    const data = await bloomFetch(`/rocks/user/${user_id}`);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  }
+);
+
+// 13. Update a rock (status, completion, title)
+server.tool(
+  "update_rock",
+  "Update a rock's status, completion percentage, or title. Status values: 'OnTrack', 'OffTrack', 'Done', 'Unknown'. Completion is 0–100.",
+  {
+    rock_id: z.string().describe("The rock ID"),
+    title: z.string().optional().describe("Updated rock title"),
+    status: z.enum(["OnTrack", "OffTrack", "Done", "Unknown"]).optional().describe("Rock status"),
+    completion: z.number().min(0).max(100).optional().describe("Completion percentage (0-100)"),
+  },
+  async ({ rock_id, title, status, completion }) => {
+    const body: Record<string, unknown> = {};
+    if (title !== undefined) body.title = title;
+    if (status !== undefined) body.status = status;
+    if (completion !== undefined) body.completion = completion;
+    const data = await bloomFetch(`/rocks/${rock_id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  }
+);
+
+// 14. Get milestones for a rock
+server.tool(
+  "get_rock_milestones",
+  "List all milestones (plan steps) for a specific rock. Milestones are the bullet points under 'Plan & Milestones' on a rock card.",
+  { rock_id: z.string().describe("The rock ID") },
+  async ({ rock_id }) => {
+    const data = await bloomFetch(`/rocks/${rock_id}/milestones`);
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  }
+);
+
+// 15. Add a milestone to a rock
+server.tool(
+  "add_rock_milestone",
+  "Add a new milestone (plan step) to a rock. Milestones appear as bullet points under 'Plan & Milestones' on the rock card.",
+  {
+    rock_id: z.string().describe("The rock ID"),
+    title: z.string().describe("The milestone description, e.g. 'Define customer Day 1-30 activation milestones'"),
+    due_date: z.string().optional().describe("Due date in ISO 8601 format, e.g. '2026-09-30T00:00:00'"),
+    status: z.enum(["Incomplete", "Complete"]).optional().describe("Milestone completion status (default: Incomplete)"),
+  },
+  async ({ rock_id, title, due_date, status }) => {
+    const body: Record<string, unknown> = { title };
+    if (due_date !== undefined) body.dueDate = due_date;
+    if (status !== undefined) body.status = status;
+    const data = await bloomFetch(`/rocks/${rock_id}/milestones`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  }
+);
+
 // ---- Start ----
 
 const transport = new StdioServerTransport();

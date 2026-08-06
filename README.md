@@ -29,23 +29,45 @@ Restart Claude after running the installer.
 
 ## Auth
 
-Credentials are fetched automatically from 1Password at runtime:
+Credentials are resolved in this order — the first match wins:
 
-```
-op://Employee/Bloom Growth/Email
-op://Employee/Bloom Growth/Password
-```
+| Priority | Method | How to set up |
+|---|---|---|
+| 1 | **Env vars** | Set `BLOOM_USERNAME` and `BLOOM_PASSWORD` in your shell or MCP server config |
+| 2 | **Local file** | Run the `setup_credentials` tool in Claude (see below) |
+| 3 | **1Password CLI** | Requires `op` CLI signed in with a `Bloom Growth` item in the `Employee` vault |
 
-Tokens are cached for their full TTL — no repeated logins. To verify your 1Password item is set up correctly:
+### Option A — Set up via Claude (recommended for non-1Password users)
+
+After installing, open Claude and say:
+
+> "Set up my Bloom Growth credentials"
+
+Claude will call the `setup_credentials` tool, verify your login against the Bloom API, and save credentials to `~/.bloom-mcp/credentials.json` (owner-only, `chmod 600`). You only need to do this once.
+
+Other credential tools available in Claude:
+- `check_credentials` — confirm which source is active and that the connection works
+- `clear_credentials` — remove the locally stored credentials file
+
+### Option B — Environment variables
+
+Add to your shell profile or MCP server config:
 
 ```bash
-op read "op://Employee/Bloom Growth/Email"
-op read "op://Employee/Bloom Growth/Password"
+export BLOOM_USERNAME="you@example.com"
+export BLOOM_PASSWORD="yourpassword"
 ```
 
-Both commands should print a value. If either fails, open 1Password and create an item named `Bloom Growth` in the `Employee` vault with your Bloom login credentials.
+### Option C — 1Password CLI (LiveBy team)
 
-Alternatively, set `BLOOM_USERNAME` and `BLOOM_PASSWORD` environment variables to bypass 1Password entirely.
+Requires the `op` CLI signed in. Create a `Bloom Growth` item in the `Employee` vault:
+
+```bash
+op read "op://Employee/Bloom Growth/Email"   # should print your email
+op read "op://Employee/Bloom Growth/Password" # should print your password
+```
+
+Tokens are cached for their full TTL — no repeated logins per session.
 
 ## Tools
 

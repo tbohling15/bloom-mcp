@@ -3,8 +3,49 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { execSync } from "child_process";
 import { z } from "zod";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
 const BASE_URL = "https://app.bloomgrowth.com/api/v1";
+const CREDENTIALS_DIR = path.join(os.homedir(), ".bloom-mcp");
+const CREDENTIALS_FILE = path.join(CREDENTIALS_DIR, "credentials.json");
+
+// ---- Credential storage ----
+
+interface StoredCredentials {
+  username: string;
+  password: string;
+}
+
+function loadStoredCredentials(): StoredCredentials | null {
+  try {
+    if (!fs.existsSync(CREDENTIALS_FILE)) return null;
+    const raw = fs.readFileSync(CREDENTIALS_FILE, "utf8");
+    const parsed = JSON.parse(raw) as StoredCredentials;
+    if (parsed.username && parsed.password) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCredentials(username: string, password: string): void {
+  if (!fs.existsSync(CREDENTIALS_DIR)) {
+    fs.mkdirSync(CREDENTIALS_DIR, { recursive: true });
+  }
+  fs.writeFileSync(
+    CREDENTIALS_FILE,
+    JSON.stringify({ username, password }, null, 2),
+    { mode: 0o600 }
+  );
+}
+
+function clearCredentials(): void {
+  if (fs.existsSync(CREDENTIALS_FILE)) {
+    fs.unlinkSync(CREDENTIALS_FILE);
+  }
+}
 
 // ---- Auth ----
 
@@ -20,12 +61,27 @@ async function getToken(): Promise<string> {
   let password: string;
 
   if (process.env.BLOOM_USERNAME && process.env.BLOOM_PASSWORD) {
+    // 1. Environment variables (highest priority)
     userName = process.env.BLOOM_USERNAME;
     password = process.env.BLOOM_PASSWORD;
   } else {
-    // Fetch from 1Password
-    userName = execSync('op read "op://Employee/Bloom Growth/Email"', { encoding: "utf8" }).trim();
-    password = execSync('op read "op://Employee/Bloom Growth/Password"', { encoding: "utf8" }).trim();
+    const stored = loadStoredCredentials();
+    if (stored) {
+      // 2. Local credentials file (~/.bloom-mcp/credentials.json)
+      userName = stored.username;
+      password = stored.password;
+    } else {
+      // 3. 1Password CLI fallback
+      try {
+        userName = execSync('op read "op://Employee/Bloom Growth/Email"', { encoding: "utf8" }).trim();
+        password = execSync('op read "op://Employee/Bloom Growth/Password"', { encoding: "utf8" }).trim();
+      } catch {
+        throw new Error(
+          "No Bloom credentials found. Run the setup tool in Claude: " +
+          "\"Set up my Bloom Growth credentials\" — or set BLOOM_USERNAME and BLOOM_PASSWORD env vars."
+        );
+      }
+    }
   }
 
   const body = new URLSearchParams({
@@ -280,6 +336,83 @@ server.tool(
       body: JSON.stringify(body),
     });
     return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  }
+);
+
+// ---- Credential management tools ----
+
+server.tool(
+  "setup_credentials",
+  "Save your Bloom Growth username (email) and password locally so you don't need 1Password or env vars. Credentials are stored in ~/.bloom-mcp/credentials.json with owner-only permissions (chmod 600). Run this once to get started.",
+  {
+    username: z.string().describe("Your Bloom Growth login email"),
+    password: z.string().describe("Your Bloom Growth password"),
+  },
+  async ({ username, password }) => {
+    // Verify credentials work before saving
+    const body = new URLSearchParams({ grant_type: "password", userName: username, password });
+    const res = await fetch("https://app.bloomgrowth.com/Token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+
+    if (!res.ok) {
+      return {
+        content: [{
+          type: "text",
+          text: `Login failed — credentials not saved. Check your email and password and try again. (${res.status})`,
+        }],
+      };
+    }
+
+    saveCredentials(username, password);
+
+    // Prime the token cache
+    const data = (await res.json()) as { access_token: string; expires_in: number };
+    cachedToken = { value: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 };
+
+    return {
+      content: [{
+        type: "text",
+        text: `Credentials verified and saved to ${CREDENTIALS_FILE} (permissions: 600). You're ready to use Bloom Growth tools.`,
+      }],
+    };
+  }
+);
+
+server.tool(
+  "check_credentials",
+  "Show which credential source is currently active (env vars, local file, or 1Password) and confirm the connection works.",
+  {},
+  async () => {
+    let source: string;
+
+    if (process.env.BLOOM_USERNAME && process.env.BLOOM_PASSWORD) {
+      source = "Environment variables (BLOOM_USERNAME / BLOOM_PASSWORD)";
+    } else if (loadStoredCredentials()) {
+      source = `Local credentials file (${CREDENTIALS_FILE})`;
+    } else {
+      source = "1Password CLI (op://Employee/Bloom Growth)";
+    }
+
+    try {
+      await getToken();
+      return { content: [{ type: "text", text: `Connected ✓\nCredential source: ${source}` }] };
+    } catch (err) {
+      return { content: [{ type: "text", text: `Connection failed.\nCredential source attempted: ${source}\nError: ${err}` }] };
+    }
+  }
+);
+
+server.tool(
+  "clear_credentials",
+  "Remove locally stored Bloom Growth credentials from ~/.bloom-mcp/credentials.json.",
+  {},
+  async () => {
+    clearCredentials();
+    cachedToken = null;
+    return { content: [{ type: "text", text: `Credentials cleared from ${CREDENTIALS_FILE}.` }] };
   }
 );
 

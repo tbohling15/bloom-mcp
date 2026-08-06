@@ -1,13 +1,18 @@
 # bloom-mcp
 
-MCP server for [Bloom Growth](https://www.bloomgrowth.com/) — update metrics, check scorecards, and manage rocks directly from Claude.
+MCP server for [Bloom Growth](https://www.bloomgrowth.com/) — update metrics, check scorecards, manage rocks and milestones directly from Claude or any MCP-compatible AI client.
+
+---
 
 ## Prerequisites
 
 - **Node.js 18+** — [nodejs.org](https://nodejs.org)
-- **1Password CLI** — [install guide](https://developer.1password.com/docs/cli/get-started/), must be signed in with `op signin`
-- **Claude Code CLI** and/or **Claude Desktop**
-- A `Bloom Growth` item in your `Employee` 1Password vault with `Email` and `Password` fields
+- A **Bloom Growth account** with your login email and password
+
+Optional (LiveBy team only):
+- **1Password CLI** — [install guide](https://developer.1password.com/docs/cli/get-started/), signed in with `op signin`
+
+---
 
 ## Install
 
@@ -19,34 +24,40 @@ npm run build
 bash install.sh
 ```
 
-The installer will:
-- Check Node.js and 1Password CLI are present
-- Verify your Bloom credentials in 1Password
-- Build the server
-- Register `bloom-growth` in Claude Code (`~/.claude.json`) and Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`)
+The installer registers the server in Claude Code (`~/.claude.json`) and Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`) automatically.
 
-Restart Claude after running the installer.
+---
 
-## Auth
+## Get your Bloom Growth credentials
 
-Credentials are resolved in this order — the first match wins:
+The server authenticates using your Bloom Growth **email and password** — the same ones you use to log in at [app.bloomgrowth.com](https://app.bloomgrowth.com).
 
-| Priority | Method | How to set up |
-|---|---|---|
-| 1 | **Env vars** | Set `BLOOM_USERNAME` and `BLOOM_PASSWORD` in your shell or MCP server config |
-| 2 | **Local file** | Run the `setup_credentials` tool in Claude (see below) |
-| 3 | **1Password CLI** | Requires `op` CLI signed in with a `Bloom Growth` item in the `Employee` vault |
+To confirm they work, run this in your terminal:
 
-### Option A — Set up via Claude (recommended for non-1Password users)
+```bash
+curl -s -X POST "https://app.bloomgrowth.com/Token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=password" \
+  --data-urlencode "userName=you@example.com" \
+  --data-urlencode "password=yourpassword"
+```
+
+A successful response returns JSON with an `access_token`. If you see an error, double-check your email and password in Bloom Growth.
+
+---
+
+## Set up credentials
+
+### Option A — Via Claude (easiest, no terminal needed)
 
 After installing, open Claude and say:
 
 > "Set up my Bloom Growth credentials"
 
-Claude will call the `setup_credentials` tool, verify your login against the Bloom API, and save credentials to `~/.bloom-mcp/credentials.json` (owner-only, `chmod 600`). You only need to do this once.
+Claude will call the `setup_credentials` tool, verify your login, and save your credentials to `~/.bloom-mcp/credentials.json` (owner-only, `chmod 600`). Run once and you're done.
 
-Other credential tools available in Claude:
-- `check_credentials` — confirm which source is active and that the connection works
+Other credential tools you can use from Claude:
+- `check_credentials` — confirm which auth source is active and test the connection
 - `clear_credentials` — remove the locally stored credentials file
 
 ### Option B — Environment variables
@@ -60,14 +71,90 @@ export BLOOM_PASSWORD="yourpassword"
 
 ### Option C — 1Password CLI (LiveBy team)
 
-Requires the `op` CLI signed in. Create a `Bloom Growth` item in the `Employee` vault:
+Create a `Bloom Growth` item in your `Employee` 1Password vault with `Email` and `Password` fields. The server detects and uses it automatically.
 
 ```bash
-op read "op://Employee/Bloom Growth/Email"   # should print your email
-op read "op://Employee/Bloom Growth/Password" # should print your password
+op read "op://Employee/Bloom Growth/Email"    # should print your email
+op read "op://Employee/Bloom Growth/Password"  # should print your password
 ```
 
-Tokens are cached for their full TTL — no repeated logins per session.
+**Auth priority:** env vars → local credentials file → 1Password
+
+---
+
+## Install in Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "bloom-growth": {
+      "command": "node",
+      "args": ["/Users/YOUR_USERNAME/bloom-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+Replace `YOUR_USERNAME` with your macOS username. Restart Claude Desktop after saving.
+
+---
+
+## Install in Perplexity Computer
+
+Perplexity Computer supports MCP servers via a JSON config file. Open **Perplexity Computer → Settings → MCP Servers** (or check their current docs for the exact config file location) and add:
+
+```json
+{
+  "mcpServers": {
+    "bloom-growth": {
+      "command": "node",
+      "args": ["/Users/YOUR_USERNAME/bloom-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+Replace `YOUR_USERNAME` with your macOS username (`echo $USER` in terminal). Restart Perplexity Computer after saving. Then use `setup_credentials` or set `BLOOM_USERNAME` / `BLOOM_PASSWORD` env vars to authenticate.
+
+---
+
+## Install in Claude Code (CLI)
+
+The `install.sh` script handles this automatically. To add manually:
+
+```bash
+python3 - <<'EOF'
+import json, pathlib
+config = pathlib.Path.home() / '.claude.json'
+d = json.loads(config.read_text()) if config.exists() else {}
+d.setdefault('mcpServers', {})['bloom-growth'] = {
+    'command': 'node',
+    'args': [str(pathlib.Path.home() / 'bloom-mcp/dist/index.js')]
+}
+config.write_text(json.dumps(d, indent=2))
+print('Done — restart Claude Code to activate.')
+EOF
+```
+
+---
+
+## Install via Claude Code (paste-in prompt)
+
+Team members can paste this into a Claude Code session to run the full setup automatically:
+
+```
+Please set up the Bloom Growth MCP server for me. Here's what to do:
+
+1. Run the install script at ~/Downloads/bloom-mcp/install.sh (adjust this path to wherever I saved the bloom-mcp folder)
+2. The script will check for Node.js, build the server, and register it in my Claude config
+3. After it finishes, confirm the setup worked and tell me what prompts I can use
+
+Go ahead and run it now.
+```
+
+---
 
 ## Tools
 
@@ -82,30 +169,21 @@ Tokens are cached for their full TTL — no repeated logins per session.
 | `list_meetings` | Your Level 10 meetings |
 | `get_meeting_scorecard` | Scorecard for a specific meeting |
 | `get_my_rocks` | Your quarterly rocks / goals |
+| `get_user_rocks` | Rocks for a specific user (for managers) |
+| `get_rock` | Full detail for one rock including status and completion |
+| `update_rock` | Set rock status (OnTrack/OffTrack/Done) and completion % |
+| `get_rock_milestones` | List milestones for a rock |
+| `add_rock_milestone` | Add a new milestone to a rock |
 | `get_meeting_todos` | Open todos for a meeting |
+| `setup_credentials` | Save Bloom credentials locally (no 1Password needed) |
+| `check_credentials` | Confirm auth source and test connection |
+| `clear_credentials` | Remove locally stored credentials |
 
 ## Example prompts
 
-Once installed, try these in Claude:
-
 - "Show me my Bloom Growth scorecard"
-- "List my measurables in Bloom"
-- "Update my [metric name] score to [value] for this week in Bloom Growth"
+- "Update my Pending Agreements score to 4 for this week"
 - "List my quarterly rocks in Bloom"
-- "What todos are open for my leadership meeting?"
-
-## Install via Claude Code
-
-Team members can also paste this into a Claude Code session and let Claude run the setup:
-
-```
-Please set up the Bloom Growth MCP server for me. Here's what to do:
-
-1. Run the install script at ~/Downloads/bloom-mcp/install.sh (adjust this path to wherever I saved the bloom-mcp folder)
-2. The script will check for Node.js and 1Password CLI, verify my Bloom credentials in 1Password, build the server, and register it in my Claude config
-3. After it finishes, confirm the setup worked and tell me what prompts I can use
-
-Go ahead and run it now.
-```
-
-Update the path in step 1 to wherever the `bloom-mcp` folder was saved.
+- "Show milestones for my MCP Connector rock"
+- "Mark the onboarding guide milestone as done"
+- "Set up my Bloom Growth credentials"

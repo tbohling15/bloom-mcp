@@ -261,6 +261,67 @@ server.tool(
   }
 );
 
+// ---- Todo notes helper ----
+
+function bloomMeetingTodosUrl(meetingId: string): string {
+  return `https://static.bloomgrowth.com/meetings/${meetingId}?tab=MEETING&pageType=TODOS`;
+}
+
+async function getTodoNoteText(todoId: number | string): Promise<string> {
+  try {
+    const noteMeta = (await bloomFetch(`/todo/notes/${todoId}`)) as { URL?: string } | null;
+    if (!noteMeta?.URL) return "";
+    const match = noteMeta.URL.match(/\/p\/([a-f0-9-]+)/i);
+    if (!match) return "";
+    const padId = match[1];
+    const res = await fetch(`https://notes2.bloomgrowth.com/p/${padId}/export/txt`);
+    if (!res.ok) return "";
+    return (await res.text()).trim();
+  } catch {
+    return "";
+  }
+}
+
+// 10b. Get notes for a single todo
+server.tool(
+  "get_todo_notes",
+  "Get the notes/details text attached to a specific todo. Returns plain text extracted from the todo's notepad.",
+  { todo_id: z.string().describe("The todo ID") },
+  async ({ todo_id }) => {
+    const notes = await getTodoNoteText(todo_id);
+    return { content: [{ type: "text", text: notes || "(no notes)" }] };
+  }
+);
+
+// 10c. Get todos with notes attached — designed for Slack/automation exports
+server.tool(
+  "get_meeting_todos_with_notes",
+  "List all open todos for a meeting, each enriched with its notes text, and a single top-level link to the meeting's todo list in the current Bloom Growth UI (not the legacy per-todo links). Ideal for posting a todo digest to Slack.",
+  { meeting_id: z.string().describe("The L10 meeting ID"), include_closed: z.boolean().optional().describe("Include completed todos (default: false)") },
+  async ({ meeting_id, include_closed }) => {
+    const query = include_closed ? "?INCLUDE_CLOSED=true" : "";
+    const todos = (await bloomFetch(`/l10/${meeting_id}/todos${query}`)) as Array<Record<string, unknown>>;
+
+    const enriched = await Promise.all(
+      todos.map(async (t) => ({
+        id: t.Id,
+        title: t.Name,
+        owner: (t.Owner as { Name?: string } | undefined)?.Name ?? null,
+        dueDate: t.DueDate,
+        status: t.Complete ? "Complete" : "Open",
+        notes: await getTodoNoteText(t.Id as number),
+      }))
+    );
+
+    const result = {
+      meetingListUrl: bloomMeetingTodosUrl(meeting_id),
+      todos: enriched,
+    };
+
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
 // 11. Get a single rock by ID (includes status, completion, results)
 server.tool(
   "get_rock",

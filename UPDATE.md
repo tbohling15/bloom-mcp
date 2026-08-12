@@ -66,7 +66,7 @@ kill <PID>
 BLOOM_USERNAME="you@example.com" BLOOM_PASSWORD="yourpassword" BLOOM_MCP_TRANSPORT=http node ~/bloom-mcp/dist/index.js
 ```
 
-Keep this running in a terminal tab, or see the note at the bottom about keeping it alive across reboots. No changes are needed in Perplexity's connector settings — the address (`http://127.0.0.1:8420/mcp`) stays the same across updates.
+Keep this running in a terminal tab. If you're using ngrok (see [TUNNEL.md](TUNNEL.md)) to reach Perplexity's cloud-based connector setup, restart the ngrok tunnel too — its free-tier URL changes on every restart, so you'll need to re-enter the new address in Perplexity's connector settings after updating.
 
 ## 5. Confirm the update took effect
 

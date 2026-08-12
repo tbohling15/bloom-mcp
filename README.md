@@ -107,15 +107,29 @@ Replace `YOUR_USERNAME` with your macOS username. Restart Claude Desktop after s
 
 ---
 
-## Install in Perplexity Computer (or any URL-based connector)
+## Install in Perplexity Computer (or any cloud-based connector)
 
-Perplexity Computer connects to a running HTTP address rather than spawning a process from a config file. Start bloom-mcp in HTTP mode:
+Perplexity Computer's connector setup fetches your server's URL from **Perplexity's own infrastructure**, not from your machine — so `http://127.0.0.1:8420/mcp` will not work for it, even though the server runs fine locally (confirmed via direct testing). You need a public tunnel URL.
+
+**See [TUNNEL.md](TUNNEL.md) for full ngrok setup instructions.** Short version:
+
+```bash
+# Terminal 1 — start bloom-mcp
+BLOOM_USERNAME="you@example.com" BLOOM_PASSWORD="yourpassword" BLOOM_MCP_TRANSPORT=http node ~/bloom-mcp/dist/index.js
+
+# Terminal 2 — start the tunnel
+ngrok http 8420
+```
+
+Then enter the printed `https://....ngrok-free.app/mcp` address in Perplexity, with **Auth: None** and **Transport: Streamable HTTP**.
+
+## Install in other URL-based connectors running on the same machine
+
+If your connector runs locally on the same machine as bloom-mcp (not fetching from the cloud), the plain local address works directly — no tunnel needed:
 
 ```bash
 BLOOM_USERNAME="you@example.com" BLOOM_PASSWORD="yourpassword" BLOOM_MCP_TRANSPORT=http node ~/bloom-mcp/dist/index.js
 ```
-
-Leave that running, then enter this address in Perplexity's connector setup:
 
 ```
 http://127.0.0.1:8420/mcp
@@ -123,7 +137,7 @@ http://127.0.0.1:8420/mcp
 
 Notes:
 - The server binds to `127.0.0.1` only — never reachable from other machines on your network.
-- No connector-side auth/API key is needed. Since only local processes can reach `127.0.0.1`, the trust boundary is the same as stdio — anyone who could configure the connector already has shell access to the machine.
+- No connector-side auth/API key is needed for the local case. Since only local processes can reach `127.0.0.1`, the trust boundary is the same as stdio.
 - To use a different port: `BLOOM_MCP_PORT=9000 BLOOM_MCP_TRANSPORT=http node dist/index.js`, then use that port in the address.
 - Keep this process running in the background — see [UPDATE.md](UPDATE.md) or use a terminal tab / `pm2` / `launchd` to keep it alive across reboots.
 

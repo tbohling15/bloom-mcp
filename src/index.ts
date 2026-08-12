@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { execSync } from "child_process";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import http from "http";
 
 const BASE_URL = "https://app.bloomgrowth.com/api/v1";
 const CREDENTIALS_DIR = path.join(os.homedir(), ".bloom-mcp");
@@ -479,5 +481,37 @@ server.tool(
 
 // ---- Start ----
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+const useHttp = process.argv.includes("--http") || process.env.BLOOM_MCP_TRANSPORT === "http";
+
+if (useHttp) {
+  const port = Number(process.env.BLOOM_MCP_PORT ?? 8420);
+  const host = "127.0.0.1"; // localhost-only — never bind to 0.0.0.0
+
+  const httpServer = http.createServer(async (req, res) => {
+    if (req.url !== "/mcp") {
+      res.writeHead(404).end("Not found");
+      return;
+    }
+    // Stateless mode: a fresh transport per request, no session persistence needed
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    });
+    res.on("close", () => transport.close());
+    await server.connect(transport);
+
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", async () => {
+      const parsedBody = body ? JSON.parse(body) : undefined;
+      await transport.handleRequest(req, res, parsedBody);
+    });
+  });
+
+  httpServer.listen(port, host, () => {
+    console.error(`bloom-mcp listening on http://${host}:${port}/mcp (localhost only)`);
+  });
+} else {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}

@@ -107,22 +107,25 @@ Replace `YOUR_USERNAME` with your macOS username. Restart Claude Desktop after s
 
 ---
 
-## Install in Perplexity Computer
+## Install in Perplexity Computer (or any URL-based connector)
 
-Perplexity Computer supports MCP servers via a JSON config file. Open **Perplexity Computer → Settings → MCP Servers** (or check their current docs for the exact config file location) and add:
+Perplexity Computer connects to a running HTTP address rather than spawning a process from a config file. Start bloom-mcp in HTTP mode:
 
-```json
-{
-  "mcpServers": {
-    "bloom-growth": {
-      "command": "node",
-      "args": ["/Users/YOUR_USERNAME/bloom-mcp/dist/index.js"]
-    }
-  }
-}
+```bash
+BLOOM_USERNAME="you@example.com" BLOOM_PASSWORD="yourpassword" BLOOM_MCP_TRANSPORT=http node ~/bloom-mcp/dist/index.js
 ```
 
-Replace `YOUR_USERNAME` with your macOS username (`echo $USER` in terminal). Restart Perplexity Computer after saving. Then use `setup_credentials` or set `BLOOM_USERNAME` / `BLOOM_PASSWORD` env vars to authenticate.
+Leave that running, then enter this address in Perplexity's connector setup:
+
+```
+http://127.0.0.1:8420/mcp
+```
+
+Notes:
+- The server binds to `127.0.0.1` only — never reachable from other machines on your network.
+- No connector-side auth/API key is needed. Since only local processes can reach `127.0.0.1`, the trust boundary is the same as stdio — anyone who could configure the connector already has shell access to the machine.
+- To use a different port: `BLOOM_MCP_PORT=9000 BLOOM_MCP_TRANSPORT=http node dist/index.js`, then use that port in the address.
+- Keep this process running in the background — see [UPDATE.md](UPDATE.md) or use a terminal tab / `pm2` / `launchd` to keep it alive across reboots.
 
 ---
 

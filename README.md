@@ -26,6 +26,8 @@ bash install.sh
 
 The installer registers the server in Claude Code (`~/.claude.json`) and Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`) automatically.
 
+**1Password is optional.** If it's not installed, or the `Bloom Growth` item isn't found, `install.sh` will prompt you to enter your Bloom email/password directly — it verifies them against Bloom before saving, then writes them straight into your Claude config's `env` block (hardcoded per-user, no 1Password required). Press Enter at the prompt to skip and set up credentials another way later.
+
 ---
 
 ## Get your Bloom Growth credentials
@@ -48,7 +50,11 @@ A successful response returns JSON with an `access_token`. If you see an error, 
 
 ## Set up credentials
 
-### Option A — Via Claude (easiest, no terminal needed)
+### Option A — During install (hardcoded, no 1Password)
+
+`install.sh` will prompt for your Bloom email/password if 1Password isn't set up (see above). This is the fastest path for anyone outside the LiveBy 1Password vault.
+
+### Option B — Via Claude (easiest, no terminal needed)
 
 After installing, open Claude and say:
 
@@ -60,16 +66,16 @@ Other credential tools you can use from Claude:
 - `check_credentials` — confirm which auth source is active and test the connection
 - `clear_credentials` — remove the locally stored credentials file
 
-### Option B — Environment variables
+### Option C — Environment variables (manual)
 
-Add to your shell profile or MCP server config:
+Add to your shell profile, or directly to the `env` block of your MCP config entry:
 
 ```bash
 export BLOOM_USERNAME="you@example.com"
 export BLOOM_PASSWORD="yourpassword"
 ```
 
-### Option C — 1Password CLI (LiveBy team)
+### Option D — 1Password CLI (LiveBy team)
 
 Create a `Bloom Growth` item in your `Employee` 1Password vault with `Email` and `Password` fields. The server detects and uses it automatically.
 
@@ -175,9 +181,21 @@ Go ahead and run it now.
 | `get_rock_milestones` | List milestones for a rock |
 | `add_rock_milestone` | Add a new milestone to a rock |
 | `get_meeting_todos` | Open todos for a meeting |
+| `get_todo_notes` | Notes/details text for a single todo |
+| `get_meeting_todos_with_notes` | Todos enriched with notes, status, and a top-level meeting link — built for Slack digests |
 | `setup_credentials` | Save Bloom credentials locally (no 1Password needed) |
 | `check_credentials` | Confirm auth source and test connection |
 | `clear_credentials` | Remove locally stored credentials |
+
+## Manual testing (optional)
+
+You don't need to run this for Claude to work — Claude spawns the server itself. Use `start.sh` only to sanity-check the server responds outside of Claude:
+
+```bash
+BLOOM_USERNAME="you@example.com" BLOOM_PASSWORD="yourpassword" bash start.sh
+```
+
+A healthy server prints a JSON `initialize` response and exits (stdio servers close when their input stream ends — that's expected, not a crash).
 
 ## Example prompts
 

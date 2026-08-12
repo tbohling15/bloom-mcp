@@ -24,30 +24,50 @@ if [ "$NODE_MAJOR" -lt 18 ]; then
 fi
 echo "✓ Node.js $(node -v)"
 
-# ---- 2. Check 1Password CLI ----
-if ! command -v op &>/dev/null; then
-  echo ""
-  echo "ERROR: 1Password CLI (op) is not installed."
-  echo "Install it from https://developer.1password.com/docs/cli/get-started/"
-  echo "Then sign in with: op signin"
-  exit 1
+# ---- 2. Check for 1Password CLI (optional) ----
+HAS_1PASSWORD=false
+if command -v op &>/dev/null && op read "op://Employee/Bloom Growth/Email" &>/dev/null; then
+  HAS_1PASSWORD=true
+  echo "✓ 1Password CLI found with Bloom Growth credentials"
+else
+  echo "ℹ 1Password not available or 'Bloom Growth' item not found — that's fine, not required."
 fi
-echo "✓ 1Password CLI found"
 
-# ---- 3. Verify 1Password item ----
-echo ""
-echo "Checking 1Password for Bloom Growth credentials..."
-if ! op read "op://Employee/Bloom Growth/Email" &>/dev/null; then
+# ---- 3. Collect credentials if 1Password isn't set up ----
+BLOOM_USERNAME_INPUT=""
+BLOOM_PASSWORD_INPUT=""
+
+if [ "$HAS_1PASSWORD" = false ] && [ -z "${BLOOM_USERNAME:-}" ]; then
   echo ""
-  echo "ERROR: Could not read 'op://Employee/Bloom Growth/Email' from 1Password."
+  echo "No 1Password credentials and no BLOOM_USERNAME/BLOOM_PASSWORD env vars set."
+  echo "You can enter your Bloom Growth login now to save it directly into your"
+  echo "Claude MCP config (hardcoded, no 1Password required)."
   echo ""
-  echo "Fix: In 1Password, open the 'Employee' vault and create an item named"
-  echo "     'Bloom Growth' with fields: Email and Password (your Bloom login)."
-  echo ""
-  echo "Then re-run this script."
-  exit 1
+  read -r -p "Enter your Bloom Growth email (or press Enter to skip): " BLOOM_USERNAME_INPUT
+  if [ -n "$BLOOM_USERNAME_INPUT" ]; then
+    read -r -s -p "Enter your Bloom Growth password: " BLOOM_PASSWORD_INPUT
+    echo ""
+
+    echo "Verifying credentials against Bloom Growth..."
+    AUTH_CHECK=$(curl -s -X POST "https://app.bloomgrowth.com/Token" \
+      -H "Content-Type: application/x-www-form-urlencoded" \
+      --data-urlencode "grant_type=password" \
+      --data-urlencode "userName=${BLOOM_USERNAME_INPUT}" \
+      --data-urlencode "password=${BLOOM_PASSWORD_INPUT}")
+
+    if echo "$AUTH_CHECK" | grep -q "access_token"; then
+      echo "✓ Bloom Growth login verified"
+    else
+      echo ""
+      echo "ERROR: Bloom Growth login failed. Response: $AUTH_CHECK"
+      echo "Re-run this script and double-check your email/password."
+      exit 1
+    fi
+  else
+    echo "Skipping — you can set BLOOM_USERNAME/BLOOM_PASSWORD env vars, or run"
+    echo "\"Set up my Bloom Growth credentials\" in Claude after install."
+  fi
 fi
-echo "✓ Bloom Growth credentials found in 1Password"
 
 # ---- 4. Copy server files ----
 echo ""
@@ -72,13 +92,21 @@ echo "✓ Build complete"
 echo ""
 echo "Registering bloom-growth MCP server..."
 
+export BLOOM_USERNAME_INPUT
+export BLOOM_PASSWORD_INPUT
+
 python3 - <<PYEOF
-import json, pathlib
+import json, pathlib, os
 
 entry = {
     'command': 'node',
     'args': [str(pathlib.Path.home() / 'bloom-mcp/dist/index.js')]
 }
+
+username = os.environ.get('BLOOM_USERNAME_INPUT', '')
+password = os.environ.get('BLOOM_PASSWORD_INPUT', '')
+if username and password:
+    entry['env'] = {'BLOOM_USERNAME': username, 'BLOOM_PASSWORD': password}
 
 # Claude Code
 cc_path = pathlib.Path.home() / '.claude.json'

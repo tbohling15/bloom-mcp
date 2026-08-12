@@ -488,6 +488,18 @@ if (useHttp) {
   const host = "127.0.0.1"; // localhost-only — never bind to 0.0.0.0
 
   const httpServer = http.createServer(async (req, res) => {
+    // CORS: required for browser-based/webview connector setups (e.g. Perplexity)
+    // that fetch() this local address from a different origin. Safe here since
+    // the socket is bound to 127.0.0.1 only — no external network exposure.
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, Mcp-Session-Id");
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204).end();
+      return;
+    }
+
     if (req.url !== "/mcp") {
       res.writeHead(404).end("Not found");
       return;

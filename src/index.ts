@@ -500,6 +500,22 @@ if (useHttp) {
       return;
     }
 
+    const isKnownPath = req.url === "/" || req.url === "/mcp";
+    if (!isKnownPath) {
+      res.writeHead(404).end("Not found");
+      return;
+    }
+
+    // Health check for simple connectivity probes (HEAD, or GET without the
+    // SSE Accept header). Real MCP clients send GET with
+    // "Accept: text/event-stream" and fall through to the real handler below.
+    const acceptsEventStream = (req.headers.accept ?? "").includes("text/event-stream");
+    if (req.method === "HEAD" || (req.method === "GET" && !acceptsEventStream) || req.url === "/") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(req.method === "HEAD" ? undefined : JSON.stringify({ status: "ok", name: "bloom-growth", mcpEndpoint: "/mcp" }));
+      return;
+    }
+
     if (req.url !== "/mcp") {
       res.writeHead(404).end("Not found");
       return;
